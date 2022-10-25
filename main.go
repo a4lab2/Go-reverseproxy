@@ -12,10 +12,12 @@ import (
 	"strings"
 )
 
+// The struct we are building the json into
 type requestPayloadStruct struct {
 	ProxyCondition string `json:"proxy_condition"`
 }
 
+// Fetch  available addresses from the env file
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -23,11 +25,13 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// The final address we are fowarding the request to
 func getListenAddress() string {
 	port := getEnv("PORT", "1338")
 	return ":" + port
 }
 
+// The "menu" options
 func logSetup() {
 	a_condtion_url := os.Getenv("A_CONDITION_URL")
 	b_condtion_url := os.Getenv("B_CONDITION_URL")
@@ -38,6 +42,7 @@ func logSetup() {
 	log.Printf("Redirecting to B url: %s\n", b_condtion_url)
 	log.Printf("Redirecting to Default url: %s\n", default_condtion_url)
 }
+
 func handleRequestAndRedirect(w http.ResponseWriter, r *http.Request) {
 	requestPayload := parseRequestBody(r)
 
@@ -50,6 +55,7 @@ func logRequestPayload(requestionPayload requestPayloadStruct, proxyUrl string) 
 	log.Printf("proxy_condition: %s, proxy_url: %s\n", requestionPayload.ProxyCondition, proxyUrl)
 }
 
+// switch to know where the proxy condition is pointing to| Returns a string of the proxy condition from the .env file
 func getProxyUrl(proxyConditionRaw string) string {
 	proxyCond := strings.ToUpper(proxyConditionRaw)
 
@@ -70,6 +76,7 @@ func getProxyUrl(proxyConditionRaw string) string {
 }
 func main() {
 	logSetup()
+	//route to execute the handler
 	http.HandleFunc("/", handleRequestAndRedirect)
 	err := http.ListenAndServe(getListenAddress(), nil)
 	if err != nil {
@@ -77,6 +84,7 @@ func main() {
 	}
 }
 
+// read the request body and decode | returns a json decoder
 func requestBodyDecoder(r *http.Request) *json.Decoder {
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -91,20 +99,27 @@ func requestBodyDecoder(r *http.Request) *json.Decoder {
 func parseRequestBody(r *http.Request) requestPayloadStruct {
 	decoder := requestBodyDecoder(r)
 	var requestPayload requestPayloadStruct
+	// decode the json into the requestPayloadStruct
 	err := decoder.Decode(&requestPayload)
 	if err != nil {
 		panic(err)
 	}
+	// return the ready to use requestPayloadStruct
 	return requestPayload
 
 }
 
+// Serve a reverse proxy for a given url-target
 func serveReverseProxy(target string, w http.ResponseWriter, r *http.Request) {
 	url, _ := url.Parse(target)
+
+	//create a reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(url)
+	//prepare headers we want to send with the fowarded request
 	r.URL.Host = url.Host
 	r.URL.Scheme = url.Scheme
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
 	r.Host = url.Host
+	// serve
 	proxy.ServeHTTP(w, r)
 }
